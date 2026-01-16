@@ -12,7 +12,7 @@ app.secret_key = "super_secret_key"
 client = MongoClient("mongodb://localhost:27017/")
 db = client["user_db"]
 users_collection = db["users"]
-users_collection.create_index('email', unique=True)
+# users_collection.create_index('email', unique=True)
 
 fs = gridfs.GridFS(db)
 
@@ -45,7 +45,7 @@ def login():
     return render_template("login.html")
 
 
-# signup
+# signup 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
@@ -53,34 +53,36 @@ def signup():
         password = request.form.get("password")
         re_password = request.form.get("re_password")
 
-        def isStrong(password: str) -> str:
+        def isStrong(password):
             if len(password) < 8:
-                return "Password must be at least 8 characters long"
+                return False, "Password must be at least 8 characters long"
             if not re.search(r"[A-Z]", password):
-                return "Password must contain an uppercase letter"
+                return False, "Password must contain an uppercase letter"
             if not re.search(r"[a-z]", password):
-                return "Password must contain a lowercase letter"
+                return False, "Password must contain a lowercase letter"
             if not re.search(r"\d", password):
-                return "Password must contain a number"
+                return False, "Password must contain a number"
             if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", password):
-                return "Password must contain a special character"
-            return True
-    
-        if isStrong(password):
-            if password != re_password:
-                return render_template("signup.html", error="Passwords do not match")
+                return False, "Password must contain a special character"
+            return True, None
 
-            if users_collection.find_one({"email": email.lower()}):
-                return render_template("signup.html", error="User already exists")
+        strong, error_msg = isStrong(password)
+        if not strong:
+            return render_template("signup.html", error=error_msg)
 
-            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-            users_collection.insert_one({
-                "email": email.lower(), 
-                "password": hashed_password
-            })
-            return "Password Stored Successfully"
+        if password != re_password:
+            return render_template("signup.html", error="Passwords do not match")
 
-        return redirect(url_for("login"))
+        if users_collection.find_one({"email": email.lower()}):
+            return render_template("signup.html", error="User already exists")
+
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        users_collection.insert_one({
+            "email": email.lower(), 
+            "password": hashed_password
+        })
+
+        return redirect(url_for('login'))
 
     return render_template("signup.html")
 
