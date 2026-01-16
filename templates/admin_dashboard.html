@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+
+<body class="bg-light">
+
+    <div class="container mt-5">
+        <h2 class="mb-4">Admin Dashboard</h2>
+
+        <h4>Users</h4>
+        <table class="table table-bordered table-hover mb-4">
+            <thead class="table-dark">
+                <tr>
+                    <th>Email</th>
+                    <th>Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.email }}</td>
+                    <td>{% if user.email=="admin@gmail.com" %}Admin{% else %}User{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h4>Files</h4>
+        <table class="table table-bordered table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Filename</th>
+                    <th>Uploaded By</th>
+                    <th>Uploaded At</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td>{{ file.filename }}</td>
+                    <td>{{ file.uploaded_by }}</td>
+                    <td>{{ file.upload_date.strftime("%Y-%m-%d %H:%M") if file.upload_date else "N/A" }}</td>
+                    <td>
+                        <a href="/file/{{ file._id }}" class="btn btn-sm btn-info">View</a>
+                        <form action="/delete_file/{{ file._id }}" method="POST" style="display:inline;"
+                            onsubmit="return confirm('Delete this file?');">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <a href="/upload" class="btn btn-secondary">Back to Upload</a>
+        <a href="/logout" class="btn btn-danger">Logout</a>
+    </div>
+
+</body>
+
+</html>
