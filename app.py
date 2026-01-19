@@ -21,7 +21,6 @@ app.config["MAIL_USE_TLS"] = True
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.secret_key)
 
-
 # database connection
 client = MongoClient("mongodb://localhost:27017/")
 db = client["user_db"]
@@ -30,7 +29,7 @@ users_collection = db["users"]
 
 fs = gridfs.GridFS(db)
 
-# method for sending verification mail
+# Email verification link
 def send_verification_email(email):
     token = serializer.dumps(email, salt="email-verify")
 
@@ -51,8 +50,31 @@ def send_verification_email(email):
             )
     mail.send(msg)
 
+# Password reset link
+def send_password_reset_email(email):
+    token = serializer.dumps(email, salt="password-reset")
 
-# routes
+    reset_link = url_for("reset_password", token=token, _external=True)
+
+    msg = Message(
+        subject="Reset Your Password",
+        recipients=[email],
+        body=f"""
+            You requested a password reset.
+
+            Click the link below to reset your password:
+            {reset_link}
+
+            This link will expire in 30 minutes.
+
+            If you did not request this, please ignore this email.
+            """
+            )
+
+    mail.send(msg)
+
+
+# ====================================== routes =======================================
 @app.route("/")
 def index():
     if session.get("email"):
@@ -132,6 +154,74 @@ def signup():
         return render_template("login.html", success="Verification email sent. Please check your inbox.")
 
     return render_template("signup.html")
+
+
+# forget password via link
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email").lower()
+
+        user = users_collection.find_one({"email": email})
+        if user:
+            send_password_reset_email(email)
+
+        return render_template("forget.html", success="If this email exists, a reset link has been sent.")
+
+    return render_template("forget.html")
+
+
+# reset password
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    try:
+        email = serializer.loads(
+            token,
+            salt="password-reset",
+            max_age=1800  # 30 minutes
+        )
+    except SignatureExpired:
+        return "Reset link expired", 400
+    except BadSignature:
+        return "Invalid reset link", 400
+
+    if request.method == "POST":
+        password = request.form.get("password")
+        re_password = request.form.get("re_password")
+
+        def isStrong(password):
+            if len(password) < 8:
+                return False, "Password must be at least 8 characters long"
+            if not re.search(r"[A-Z]", password):
+                return False, "Password must contain an uppercase letter"
+            if not re.search(r"[a-z]", password):
+                return False, "Password must contain a lowercase letter"
+            if not re.search(r"\d", password):
+                return False, "Password must contain a number"
+            if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", password):
+                return False, "Password must contain a special character"
+            return True, None
+
+        strong, error_msg = isStrong(password)
+        if not strong:
+            return render_template("reset_password.html", error=error_msg)
+
+        if password != re_password:
+            return render_template("reset_password.html", error="Passwords do not match")
+
+        hashed_password = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt()
+        )
+
+        users_collection.update_one(
+            {"email": email},
+            {"$set": {"password": hashed_password}}
+        )
+
+        return render_template("login.html", success="Password reset successful. Please log in.")
+
+    return render_template("reset_password.html")
 
 
 # logout
@@ -229,7 +319,6 @@ def admin_dashboard():
     users = list(users_collection.find())
     files = list(fs.find())
     return render_template("admin_dashboard.html", users=users, files=files)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
