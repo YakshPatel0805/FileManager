@@ -25,7 +25,7 @@
                 {% for user in users %}
                 <tr>
                     <td>{{ user.email }}</td>
-                    <td>{% if user.email=="admin@gmail.com" %}Admin{% else %}User{% endif %}</td>
+                    <td>{% if user.email=="esalpha337@gmail.com" %}Admin{% else %}User{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -48,7 +48,7 @@
                     <td>{{ file.uploaded_by }}</td>
                     <td>{{ file.upload_date.strftime("%Y-%m-%d %H:%M") if file.upload_date else "N/A" }}</td>
                     <td>
-                        <a href="/file/{{ file._id }}" class="btn btn-sm btn-info">View</a>
+                        <a href="{{ url_for('get_file', file_id=file._id) }}" class="btn btn-sm btn-info">View</a>
                         <form action="/delete_file/{{ file._id }}" method="POST" style="display:inline;"
                             onsubmit="return confirm('Delete this file?');">
                             <button type="submit" class="btn btn-sm btn-danger">Delete</button>
@@ -64,5 +64,6 @@
     </div>
 
 </body>
+
 
 </html>
