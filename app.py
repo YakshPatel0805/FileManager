@@ -1,11 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, session, abort, send_file
 from pymongo import MongoClient
-import bcrypt, gridfs, re
+import bcrypt, re
 from bson import ObjectId
 from io import BytesIO
 from datetime import datetime
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from bson.binary import Binary
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"
@@ -13,10 +14,9 @@ app.secret_key = "super_secret_key"
 # email configration
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
 app.config["MAIL_PORT"] = 587
-app.config["MAIL_USE_TLS"] = True
-# app.config["MAIL_USERNAME"] = "your_email@gmail.com"
-# app.config["MAIL_PASSWORD"] = "your_app_password"   # Gmail-app password (16 digit)
-# app.config["MAIL_DEFAULT_SENDER"] = "your_email@gmail.com"
+app.config["MAIL_USE_TLS"] = True# Max file size = 16 MB
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB
+MAX_FILE_SIZE = 16 * 1024 * 1024
 
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.secret_key)
@@ -25,9 +25,9 @@ serializer = URLSafeTimedSerializer(app.secret_key)
 client = MongoClient("mongodb://localhost:27017/")
 db = client["user_db"]
 users_collection = db["users"]
+files_collection = db["files"]
 # users_collection.create_index('email', unique=True)
 
-fs = gridfs.GridFS(db)
 
 # Email verification link
 def send_verification_email(email):
@@ -74,7 +74,7 @@ def send_password_reset_email(email):
     mail.send(msg)
 
 
-# ====================================== routes =======================================
+# routes
 @app.route("/")
 def index():
     if session.get("email"):
@@ -204,7 +204,7 @@ def reset_password(token):
 
         strong, error_msg = isStrong(password)
         if not strong:
-            return render_template("reset_password.html", error=error_msg)
+            return render_template("reset.html", error=error_msg)
 
         if password != re_password:
             return render_template("reset_password.html", error="Passwords do not match")
@@ -254,7 +254,6 @@ def verify_email(token):
         success="Email verified successfully. You can now log in.")
 
 
-# upload file
 @app.route("/upload", methods=["GET", "POST"])
 def upload_file():
     if not session.get("email"):
@@ -262,15 +261,28 @@ def upload_file():
 
     if request.method == "POST":
         file = request.files.get("file")
+
         if not file or file.filename == "":
             return render_template("upload.html", error="No file selected")
-        fs.put(
-            file,
-            filename=file.filename,
-            content_type=file.content_type,
-            uploaded_by=session["email"],
-            upload_date=datetime.now()
-        )
+
+        file.seek(0, 2)   # move cursor to end
+        file_size = file.tell()
+        file.seek(0)      # reset cursor
+
+        if file_size > MAX_FILE_SIZE:
+            return render_template(
+                "upload.html",
+                error="File exceeds 16 MB size limit"
+            )
+
+        files_collection.insert_one({
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "data": Binary(file.read()),
+            "uploaded_by": session["email"],
+            "upload_date": datetime.now()
+        })
+
         return render_template("upload.html", success="File uploaded successfully")
 
     return render_template("upload.html")
@@ -282,18 +294,21 @@ def show_files():
     if not session.get("email"):
         return redirect(url_for("login"))
 
-    files = list(fs.find())
+    files = list(files_collection.find())
     return render_template("files.html", files=files)
 
 
 # download file
 @app.route("/get_file/<file_id>")
 def get_file(file_id):
-    file = fs.get(ObjectId(file_id))
+    file = files_collection.find_one({"_id": ObjectId(file_id)})
+    if not file:
+        abort(404)
+
     return send_file(
-        BytesIO(file.read()),
-        download_name=file.filename,
-        mimetype=file.content_type,
+        BytesIO(file["data"]),
+        download_name=file["filename"],
+        mimetype=file["content_type"],
         as_attachment=False
     )
 
@@ -303,10 +318,8 @@ def get_file(file_id):
 def delete_file(file_id):
     if not session.get("is_admin"):
         abort(403)
-    try:
-        fs.delete(ObjectId(file_id))
-    except Exception as e:
-        return f"Error deleting file: {str(e)}"
+
+    files_collection.delete_one({"_id": ObjectId(file_id)})
     return redirect(url_for("admin_dashboard"))
 
 
@@ -317,8 +330,17 @@ def admin_dashboard():
         abort(403)
 
     users = list(users_collection.find())
-    files = list(fs.find())
+    files = list(files_collection.find())
     return render_template("admin_dashboard.html", users=users, files=files)
+
+
+@app.errorhandler(413)
+def file_too_large(error):
+    return render_template(
+        "upload.html",
+        error="File too large. Maximum allowed size is 16 MB."
+    ), 413
+
 
 if __name__ == "__main__":
     app.run(debug=True)
