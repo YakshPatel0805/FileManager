@@ -16,12 +16,48 @@
                 <div class="card shadow">
                     <div class="card-body">
                         <h3 class="card-title text-center mb-4">Upload File</h3>
-                        <form method="POST" enctype="multipart/form-data">
+
+                        <form method="POST" id="uploadForm" enctype="multipart/form-data">
                             <div class="mb-3">
                                 <input type="file" class="form-control" name="file" required>
                             </div>
                             <button class="btn btn-primary w-100" type="submit">Upload</button>
                         </form>
+
+                        <progress id="progressBar" value="0" max="100" style="width:100%; display:none;"></progress>
+                        <p id="status"></p>
+
+                        {% if error %}<p style="color:red">{{ error }}</p>{% endif %}
+                        {% if success %}<p style="color:green">{{ success }}</p>{% endif %}
+
+                        <script>
+                            document.getElementById("uploadForm").addEventListener("submit", function (e) {
+                                e.preventDefault();
+
+                                const formData = new FormData(this);
+                                const xhr = new XMLHttpRequest();
+
+                                xhr.open("POST", "/upload", true);
+
+                                xhr.upload.onprogress = function (e) {
+                                    if (e.lengthComputable) {
+                                        const percent = (e.loaded / e.total) * 100;
+                                        const progressBar = document.getElementById("progressBar");
+                                        progressBar.style.display = "block";
+                                        progressBar.value = percent;
+                                    }
+                                };
+
+                                xhr.onload = function () {
+                                    document.getElementById("status").innerText =
+                                        xhr.status === 200 ? "Upload complete!" : "Upload failed!";
+                                    document.getElementById("progressBar").value = 0;
+                                };
+
+                                xhr.send(formData);
+                            });
+                        </script>
+
                         <div class="mt-3 d-flex justify-content-between">
                             <a href="/show_files" class="btn btn-secondary">Show Files</a>
                             {% if session.get('is_admin') %}
@@ -29,6 +65,7 @@
                             {% endif %}
                             <a href="/logout" class="btn btn-danger">Logout</a>
                         </div>
+                        
                         {% if error %}<div class="alert alert-danger mt-2">{{ error }}</div>{% endif %}
                         {% if success %}<div class="alert alert-success mt-2">{{ success }}</div>{% endif %}
                     </div>
