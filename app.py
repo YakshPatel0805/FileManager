@@ -347,6 +347,7 @@ def delete_file(file_id):
         abort(403)
 
     files_collection.delete_one({"_id": ObjectId(file_id)})
+    flash('file deleted successfully', 'success')
     return redirect(url_for("admin_dashboard"))
 
 
@@ -371,3 +372,4 @@ def file_too_large(error):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
