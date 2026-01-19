@@ -4,9 +4,23 @@ import bcrypt, gridfs, re
 from bson import ObjectId
 from io import BytesIO
 from datetime import datetime
+from flask_mail import Mail, Message
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"
+
+# email configration
+app.config["MAIL_SERVER"] = "smtp.gmail.com"
+app.config["MAIL_PORT"] = 587
+app.config["MAIL_USE_TLS"] = True
+# app.config["MAIL_USERNAME"] = "your_email@gmail.com"
+# app.config["MAIL_PASSWORD"] = "your_app_password"   # Gmail-app password (16 digit)
+# app.config["MAIL_DEFAULT_SENDER"] = "your_email@gmail.com"
+
+mail = Mail(app)
+serializer = URLSafeTimedSerializer(app.secret_key)
+
 
 # database connection
 client = MongoClient("mongodb://localhost:27017/")
@@ -15,6 +29,28 @@ users_collection = db["users"]
 # users_collection.create_index('email', unique=True)
 
 fs = gridfs.GridFS(db)
+
+# method for sending verification mail
+def send_verification_email(email):
+    token = serializer.dumps(email, salt="email-verify")
+
+    verify_link = url_for("verify_email", token=token, _external=True)
+
+    msg = Message(
+        subject="Verify Your Email",
+        recipients=[email],
+        body=f"""
+            Welcome!
+
+            Please verify your email by clicking the link below:
+
+            {verify_link}
+
+            This link will expire in 1 hour.
+            """
+            )
+    mail.send(msg)
+
 
 # routes
 @app.route("/")
@@ -36,6 +72,11 @@ def login():
 
         user = users_collection.find_one({"email": email.lower()})
         if user and bcrypt.checkpw(password, user["password"]):
+
+            # # Email verification before login
+            # if not user.get('is_verified'):
+            #     return render_template('login.html', error='Please verify email first...')
+
             session["email"] = email.lower()
             session["is_admin"] = True if email == "admin@gmail.com" else False
             return redirect(url_for("index"))
@@ -77,12 +118,18 @@ def signup():
             return render_template("signup.html", error="User already exists")
 
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
         users_collection.insert_one({
-            "email": email.lower(), 
-            "password": hashed_password
+            "email": email.lower(),
+            "password": hashed_password,
+            "is_verified": False,
+            "created_at": datetime.now()
         })
 
-        return redirect(url_for('login'))
+        # # Email verification
+        # send_verification_email(email.lower())
+
+        return render_template("login.html", success="Verification email sent. Please check your inbox.")
 
     return render_template("signup.html")
 
@@ -92,6 +139,29 @@ def signup():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+# Verification
+@app.route("/verify/<token>")
+def verify_email(token):
+    try:
+        email = serializer.loads(
+            token,
+            salt="email-verify",
+            max_age=3600  # 1 hour
+        )
+    except SignatureExpired:
+        return "Verification link expired", 400
+    except BadSignature:
+        return "Invalid verification link", 400
+
+    users_collection.update_one(
+        {"email": email},
+        {"$set": {"is_verified": True, "verified_at": datetime.now()}})
+
+    return render_template(
+        "login.html",
+        success="Email verified successfully. You can now log in.")
 
 
 # upload file
@@ -116,7 +186,7 @@ def upload_file():
     return render_template("upload.html")
 
 
-# SHOW FILES (All users can view/download)
+# show files (All users can view/download)
 @app.route("/show_files")
 def show_files():
     if not session.get("email"):
@@ -127,7 +197,7 @@ def show_files():
 
 
 # download file
-@app.route("/file/<file_id>")
+@app.route("/get_file/<file_id>")
 def get_file(file_id):
     file = fs.get(ObjectId(file_id))
     return send_file(
@@ -150,7 +220,7 @@ def delete_file(file_id):
     return redirect(url_for("admin_dashboard"))
 
 
-# ADMIN DASHBOARD
+# admin dashboard
 @app.route("/admin", methods=["GET"])
 def admin_dashboard():
     if not session.get("is_admin"):
