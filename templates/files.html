@@ -28,7 +28,7 @@
                     <td>{{ file.uploaded_by }}</td>
                     <td>{{ file.upload_date.strftime("%Y-%m-%d %H:%M") if file.upload_date else "N/A" }}</td>
                     <td>
-                        <a href="/file/{{ file._id }}" class="btn btn-sm btn-info">View</a>
+                        <a href="/get_file/{{ file._id }}" class="btn btn-sm btn-info">View</a>
                         {% if session.get('is_admin') %}
                         <form action="/delete_file/{{ file._id }}" method="POST" style="display:inline;"
                             onsubmit="return confirm('Delete this file?');">
@@ -44,5 +44,6 @@
     </div>
 
 </body>
+
 
 </html>
