@@ -28,7 +28,7 @@ serializer = URLSafeTimedSerializer(app.secret_key)
 
 # database connection
 client = MongoClient("mongodb://localhost:27017/")
-db = client["user_db"]
+db = client["FileManager"]
 users_collection = db["users"]
 files_collection = db["files"]
 users_collection.create_index("email", unique=True)
@@ -372,4 +372,5 @@ def file_too_large(error):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
