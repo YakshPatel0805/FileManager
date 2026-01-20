@@ -1,3 +1,5 @@
+# # Static Program runs on local system only...
+
 import os
 import shutil
 
@@ -49,3 +51,4 @@ def organize_files(main_folder):
 main_folder_path = r"add folder location"  # Update this to your folder
 
 organize_files(main_folder_path)
+
