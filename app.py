@@ -7,6 +7,7 @@ from datetime import datetime
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from bson.binary import Binary
+from agent import summarize_text_agent
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"
@@ -18,7 +19,7 @@ app.config["MAIL_USE_TLS"] = True
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB
 MAX_FILE_SIZE = 16 * 1024 * 1024
 app.config["MAIL_USERNAME"] = "esalpha337@gmail.com"
-app.config["MAIL_PASSWORD"] = "mydi jyoz ehkl tctl"
+app.config["MAIL_PASSWORD"] = "App_password"  # 16 digit
 app.config["MAIL_DEFAULT_SENDER"] = "esalpha337@gmail.com"
 app.config["MAIL_DEBUG"] = True
 
@@ -340,6 +341,37 @@ def get_file(file_id):
     )
 
 
+# summarize uploaded file content
+@app.route('/summarize/<file_id>')
+def summarize(file_id):
+    if not session.get("email"):
+        return redirect(url_for("login"))
+
+    file = files_collection.find_one({"_id": ObjectId(file_id)})
+    if not file:
+        abort(404)
+
+    try:
+        text = file["data"].decode("utf-8")
+    except Exception:
+        abort(400, "Unsupported file type")
+
+    summary = summarize_text_agent(text)
+
+    output = BytesIO()
+    output.write(summary.encode("utf-8"))
+    output.seek(0)
+
+    summary_filename = f"summary_{file['filename']}.txt"
+
+    return send_file(
+        output,
+        download_name=summary_filename,
+        mimetype="text/plain",
+        as_attachment=True
+    )
+
+
 # admin delete file
 @app.route("/delete_file/<file_id>", methods=["POST"])
 def delete_file(file_id):
@@ -372,5 +404,6 @@ def file_too_large(error):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
