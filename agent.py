@@ -74,7 +74,7 @@ def summarize_text_agent(text: str) -> str:
         LoaderAgent(llm),
         AnalyzerAgent(llm),
         SummarizerAgent(llm),
-        ReviewerAgent(llm)
+        # ReviewerAgent(llm)
     ])
 
     return pipeline.run(text)
