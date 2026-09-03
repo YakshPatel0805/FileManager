@@ -109,7 +109,7 @@ def login():
             return redirect(url_for("login"))
 
         session["email"] = email
-        session["is_admin"] = email == "esalpha337@gmail.com"
+        session["is_admin"] = email == ""    # Write admin email here.
 
         flash("Logged in successfully", "success")
         return redirect(url_for("index"))
